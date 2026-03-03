@@ -10,56 +10,113 @@ class GeminiEngine:
         api_key = os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key)
 
-    def gerar_analise_economica(self, titulo, resumo, categoria):
+    # ==========================================================
+    # GERAR ARTIGO TÉCNICO EVERGREEN - FOTOGRAFIA
+    # ==========================================================
+
+    def gerar_artigo_tecnico_fotografia(self, modulo, tema):
 
         prompt = f"""
-Atue como um Economista Sênior (PhD) com foco em análise de dados e estratégia macroeconômica.
+Atue como um Fotógrafo Profissional e Educador Técnico com mais de 20 anos de experiência em fotografia digital, analógica e produção audiovisual.
 
-Objetivo: Realize uma varredura nos principais portais de notícias e bancos de dados financeiros
-(como Bloomberg, Reuters, Financial Times, Valor Econômico e sites de Bancos Centrais) para extrair 
-os fatos mais relevantes das últimas 24 horas.
+Seu objetivo é produzir um artigo técnico, didático e evergreen para um blog especializado em fotografia chamado "MD Arte Foto".
 
-Informações base:
-
-Título da resenha: {titulo}
-
-Resumo da resenha:
-{resumo}
-
-Categoria: {categoria}
+Módulo Editorial: {modulo}
+Tema do Artigo: {tema}
 
 Diretrizes Obrigatórias:
 
-Tom e Estilo: Imparcial, técnico e analítico. Use linguagem clara, objetiva e evite adjetivos desnecessários ou termos sensacionalistas.
+Tom e Estilo:
+- Linguagem clara, técnica e educativa.
+- Não utilizar primeira pessoa.
+- Não emitir opiniões pessoais.
+- Não usar linguagem sensacionalista.
+- Manter postura profissional e instrutiva.
 
-Extensão: Mínimo de 700 palavras. Desenvolva os parágrafos com profundidade.
+Extensão:
+- Entre 900 e 1200 palavras.
+- Parágrafos desenvolvidos com profundidade técnica.
 
-Originalidade: O texto deve ser inédito, processando as informações e reescrevendo-as com uma narrativa própria (sem plágio).
+Estrutura Obrigatória:
 
-Isenção: Proibido emitir opinião pessoal ou usar primeira pessoa. Se houver controvérsias, apresente os dois lados de forma equilibrada.
+Título Principal (não repetir o módulo).
+Introdução envolvente contextualizando o tema.
+Seção explicando o conceito técnico detalhadamente.
+Seção mostrando aplicação prática no mundo real.
+Seção sobre erros comuns e como evitá-los.
+Seção com dicas profissionais avançadas.
+Considerações Finais com visão estratégica e educativa.
 
-Estrutura do Texto:
-
-Título: Chamativo, porém informativo e sóbrio.
-
-Lide (Lead): O primeiro parágrafo deve responder: Quem? O quê? Onde? Quando? Por quê? e Como?
-
-Subtítulos: Utilize pelo menos dois subtítulos para organizar a progressão temática do texto.
-
-Corpo: Desenvolva os fatos de forma cronológica ou por relevância de impacto.
-
-Conclusão Analítica: Encerre com uma análise técnica sobre as implicações futuras ou o desdobramento esperado dos fatos, sem cair no opinativo subjetivo.
-
-Importante:
-- Não escreva explicações externas.
-- Não inclua observações adicionais.
-- Entregue apenas o texto final já estruturado.
+Regras:
+- Usar subtítulos naturais no texto.
+- Não escrever comentários fora do artigo.
+- Não explicar o que está fazendo.
+- Entregar apenas o artigo final estruturado.
 """
 
-
         response = self.client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             contents=prompt
         )
 
         return response.text.strip()
+
+    # ==========================================================
+    # GERAR QUERY VISUAL PARA BUSCA DE IMAGEM
+    # ==========================================================
+
+    def gerar_query_visual_fotografia(self, modulo, tema):
+
+        prompt = f"""
+Com base no módulo editorial e no tema abaixo, gere APENAS uma sequência de 3 a 5 palavras-chave em INGLÊS que representem uma imagem fotográfica ideal para ilustrar o artigo.
+
+Módulo: {modulo}
+Tema: {tema}
+
+Diretrizes:
+- Usar apenas termos visuais.
+- Não usar frases completas.
+- Não usar pontuação extra.
+- Focar em câmera, luz, lente, cenário ou ação fotográfica.
+- Retornar somente as palavras em inglês.
+"""
+
+        try:
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            return response.text.strip().replace('"', '').replace("'", "")
+        except:
+            return None
+
+    # ==========================================================
+    # GERAR META DESCRIÇÃO SEO
+    # ==========================================================
+
+    def gerar_meta_descricao(self, titulo, texto):
+
+        prompt = f"""
+Crie uma meta descrição SEO otimizada entre 140 e 160 caracteres com base no título e no conteúdo abaixo.
+
+Título: {titulo}
+
+Conteúdo:
+{texto[:1000]}
+
+Regras:
+- Linguagem profissional.
+- Foco em fotografia.
+- Alta taxa de clique.
+- Não ultrapassar 160 caracteres.
+- Retornar apenas a meta descrição.
+"""
+
+        try:
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            return response.text.strip()
+        except:
+            return ""
