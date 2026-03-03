@@ -73,7 +73,7 @@ def registrar_postagem(data_str, horario_agenda):
         with open(ARQUIVO_CONTROLE_DIARIO, "r", encoding="utf-8") as f:
             linhas = f.readlines()
 
-    # Adiciona o novo registro e mantém apenas os últimos 15
+    # Adiciona o novo registro e mantém apenas os últimos 100
     nova_linha = f"{data_str}|{horario_agenda}\n"
     if nova_linha not in linhas:
         linhas.append(nova_linha)
