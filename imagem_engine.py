@@ -2,22 +2,13 @@
 
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from PIL import Image
 from io import BytesIO
-
 
 ARQUIVO_CONTROLE_IMAGENS = "controle_imagens.txt"
 PASTA_ASSETS = "assets"
 DIAS_BLOQUEIO = 30
-
-# 🔒 Palavras proibidas para evitar imagens fora de contexto financeiro
-PALAVRAS_PROIBIDAS = [
-    "beach", "praia", "sea", "ocean", "mar",
-    "nature", "forest", "mountain", "travel",
-    "tourism", "holiday", "sunset", "landscape",
-    "food", "restaurant", "people smiling"
-]
 
 
 class ImageEngine:
@@ -26,12 +17,12 @@ class ImageEngine:
         self.pexels_key = os.getenv("PEXELS_API_KEY")
         self.unsplash_key = os.getenv("UNSPLASH_API_KEY")
 
-
     # ==========================================================
-    # CONTROLE DE REPETIÇÃO POR TEMA (30 DIAS)
+    # CONTROLE DE REPETIÇÃO POR TEMA
     # ==========================================================
 
     def _imagem_usada_recentemente(self, tema, url):
+
         if not os.path.exists(ARQUIVO_CONTROLE_IMAGENS):
             return False
 
@@ -64,58 +55,26 @@ class ImageEngine:
 
         return False
 
-
     def _registrar_imagem(self, tema, url):
+
         hoje = datetime.utcnow().strftime("%Y-%m-%d")
 
         with open(ARQUIVO_CONTROLE_IMAGENS, "a", encoding="utf-8") as f:
             f.write(f"{hoje}|{tema}|{url}\n")
 
-
     # ==========================================================
-    # FILTRO SEMÂNTICO BÁSICO
-    # ==========================================================
-
-    def _imagem_relevante(self, url):
-        url_lower = url.lower()
-        for palavra in PALAVRAS_PROIBIDAS:
-            if palavra in url_lower:
-                return False
-        return True
-
-
-    # ==========================================================
-    # VERIFICAR TAMANHO RSS (>= 600px)
+    # VALIDAÇÃO DE TAMANHO (>= 800px)
     # ==========================================================
 
-    def _rss_valida(self, url):
+    def _imagem_valida(self, url):
+
         try:
             response = requests.get(url, timeout=5)
             img = Image.open(BytesIO(response.content))
-            largura, _ = img.size
-            return largura >= 600
+            largura, altura = img.size
+            return largura >= 800 and altura >= 450
         except:
             return False
-
-
-    # ==========================================================
-    # QUERY INTELIGENTE POR TEMA
-    # ==========================================================
-
-    def _gerar_query_por_tema(self, tema):
-
-        if tema == "mercado":
-            return "mercado financeiro bolsa de valores gráfico ações economia Brasil"
-
-        elif tema == "investimentos":
-            return "investimentos ações renda fixa análise financeira economia Brasil"
-
-        elif tema == "financas":
-            return "finanças economia inflação dinheiro política monetária Brasil"
-
-        else:
-            return "economia mercado financeiro Brasil"
-
 
     # ==========================================================
     # BUSCA PEXELS
@@ -134,18 +93,16 @@ class ImageEngine:
         }
 
         r = requests.get(url, headers=headers, params=params)
-        print("Status Pexels:", r.status_code)
 
         if r.status_code != 200:
             return None
 
         data = r.json()
-        print("Total fotos Pexels:", len(data.get("photos", [])))
 
         for foto in data.get("photos", []):
             img_url = foto["src"]["large"]
 
-            if not self._imagem_relevante(img_url):
+            if not self._imagem_valida(img_url):
                 continue
 
             if not self._imagem_usada_recentemente(tema, img_url):
@@ -153,7 +110,6 @@ class ImageEngine:
                 return img_url
 
         return None
-
 
     # ==========================================================
     # BUSCA UNSPLASH
@@ -171,18 +127,16 @@ class ImageEngine:
         }
 
         r = requests.get(url, params=params)
-        print("Status Unsplash:", r.status_code)
 
         if r.status_code != 200:
             return None
 
         data = r.json()
-        print("Total fotos Unsplash:", len(data.get("results", [])))
 
         for foto in data.get("results", []):
             img_url = foto["urls"]["regular"]
 
-            if not self._imagem_relevante(img_url):
+            if not self._imagem_valida(img_url):
                 continue
 
             if not self._imagem_usada_recentemente(tema, img_url):
@@ -191,19 +145,21 @@ class ImageEngine:
 
         return None
 
-
     # ==========================================================
-    # IMAGEM INSTITUCIONAL SEQUENCIAL
+    # IMAGEM LOCAL (ASSETS)
     # ==========================================================
 
-    def _buscar_institucional(self, tema):
+    def _buscar_assets(self, modulo, tema):
 
-        pasta_tema = os.path.join(PASTA_ASSETS, tema)
+        pasta_modulo = os.path.join(PASTA_ASSETS, modulo)
 
-        if not os.path.exists(pasta_tema):
+        if not os.path.exists(pasta_modulo):
             return None
 
-        arquivos = sorted([f for f in os.listdir(pasta_tema) if f.lower().endswith(".jpg")])
+        arquivos = sorted([
+            f for f in os.listdir(pasta_modulo)
+            if f.lower().endswith(".jpg")
+        ])
 
         if not arquivos:
             return None
@@ -231,39 +187,32 @@ class ImageEngine:
 
         proximo = arquivos[indice]
 
-        caminho_relativo = f"{PASTA_ASSETS}/{tema}/{proximo}"
+        caminho_relativo = f"{PASTA_ASSETS}/{modulo}/{proximo}"
 
+        # Ajuste para seu GitHub Pages
         url_publica = f"https://marcodaher-diario.github.io/radar-do-mercado-bot/{caminho_relativo}"
 
         self._registrar_imagem(tema, url_publica)
 
         return url_publica
 
-
     # ==========================================================
     # FUNÇÃO PRINCIPAL
     # ==========================================================
 
-    def obter_imagem(self, noticia, tema):
+    def obter_imagem(self, modulo, tema, query_visual):
 
-        rss_img = noticia.get("imagem", "")
-
-        if rss_img and self._rss_valida(rss_img):
-            if self._imagem_relevante(rss_img):
-                if not self._imagem_usada_recentemente(tema, rss_img):
-                    self._registrar_imagem(tema, rss_img)
-                    return rss_img
-
-        query = self._gerar_query_por_tema(tema)
-
-        if self.pexels_key:
-            img = self._buscar_pexels(query, tema)
+        # 1️⃣ Tenta Pexels
+        if self.pexels_key and query_visual:
+            img = self._buscar_pexels(query_visual, tema)
             if img:
                 return img
 
-        if self.unsplash_key:
-            img = self._buscar_unsplash(query, tema)
+        # 2️⃣ Tenta Unsplash
+        if self.unsplash_key and query_visual:
+            img = self._buscar_unsplash(query_visual, tema)
             if img:
                 return img
 
-        return self._buscar_institucional(tema)
+        # 3️⃣ Fallback assets
+        return self._buscar_assets(modulo, tema)
