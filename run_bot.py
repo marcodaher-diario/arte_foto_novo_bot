@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
-import feedparser
+import random
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from email.utils import parsedate_to_datetime
 
 from configuracoes import (
     BLOG_ID,
-    RSS_FEEDS,
-    PALAVRAS_MERCADO,
-    PALAVRAS_INVESTIMENTOS,
-    PALAVRAS_FINANCAS,
+    MODULOS_EDITORIAIS,
+    DIAS_REPETICAO_TEMA,
+    DIAS_REPETICAO_MODULO,
+    TAGS_FIXAS_FOTOGRAFIA,
     BLOCO_FIXO_FINAL
 )
 
@@ -26,15 +24,12 @@ from imagem_engine import ImageEngine
 # CONFIGURAÇÃO
 # ==========================================================
 
-AGENDA_POSTAGENS = {
-    "10:00": "mercado",
-    "14:00": "investimentos",
-    "18:00": "financas"
-}
-
+HORARIO_PUBLICACAO = "19:00"
 JANELA_MINUTOS = 59
+
 ARQUIVO_CONTROLE_DIARIO = "controle_diario.txt"
-ARQUIVO_POSTS_PUBLICADOS = "posts_publicados.txt"
+ARQUIVO_CONTROLE_MODULOS = "controle_modulos.txt"
+ARQUIVO_CONTROLE_TEMAS = "controle_temas.txt"
 
 
 # ==========================================================
@@ -55,85 +50,145 @@ def dentro_da_janela(min_atual, min_agenda):
 
 
 # ==========================================================
-# CONTROLE DE PUBLICAÇÃO
+# CONTROLE DIÁRIO
 # ==========================================================
 
-def ja_postou(data_str, horario_agenda):
+def ja_postou_hoje(data_str):
     if not os.path.exists(ARQUIVO_CONTROLE_DIARIO):
         return False
 
     with open(ARQUIVO_CONTROLE_DIARIO, "r", encoding="utf-8") as f:
         for linha in f:
-            data, hora = linha.strip().split("|")
-            if data == data_str and hora == horario_agenda:
+            if linha.strip() == data_str:
                 return True
+
     return False
 
 
-def registrar_postagem(data_str, horario_agenda):
+def registrar_postagem(data_str):
     with open(ARQUIVO_CONTROLE_DIARIO, "a", encoding="utf-8") as f:
-        f.write(f"{data_str}|{horario_agenda}\n")
+        f.write(f"{data_str}\n")
 
 
 # ==========================================================
-# CONTROLE DE REPETIÇÃO DE LINK
+# CONTROLE DE REPETIÇÃO DE MÓDULO
 # ==========================================================
 
-def link_ja_publicado(link):
-    if not os.path.exists(ARQUIVO_POSTS_PUBLICADOS):
+def modulo_usado_recentemente(modulo):
+
+    if not os.path.exists(ARQUIVO_CONTROLE_MODULOS):
         return False
 
-    with open(ARQUIVO_POSTS_PUBLICADOS, "r", encoding="utf-8") as f:
+    hoje = datetime.utcnow()
+
+    with open(ARQUIVO_CONTROLE_MODULOS, "r", encoding="utf-8") as f:
         for linha in f:
-            if linha.strip() == link:
-                return True
+            linha = linha.strip()
+            if not linha or "|" not in linha:
+                continue
+
+            data_str, modulo_salvo = linha.split("|")
+
+            try:
+                data_mod = datetime.strptime(data_str, "%Y-%m-%d")
+            except:
+                continue
+
+            if modulo_salvo == modulo:
+                if (hoje - data_mod).days < DIAS_REPETICAO_MODULO:
+                    return True
 
     return False
 
 
-def registrar_link_publicado(link):
-    with open(ARQUIVO_POSTS_PUBLICADOS, "a", encoding="utf-8") as f:
-        f.write(f"{link}\n")
+def registrar_modulo(modulo):
+    hoje = datetime.utcnow().strftime("%Y-%m-%d")
+    with open(ARQUIVO_CONTROLE_MODULOS, "a", encoding="utf-8") as f:
+        f.write(f"{hoje}|{modulo}\n")
 
 
 # ==========================================================
-# VERIFICAR TEMA
+# CONTROLE DE REPETIÇÃO DE TEMA
 # ==========================================================
 
-def verificar_assunto(titulo, texto):
-    conteudo = f"{titulo} {texto}".lower()
+def tema_usado_recentemente(tema):
 
-    if any(p in conteudo for p in PALAVRAS_MERCADO):
-        return "mercado"
+    if not os.path.exists(ARQUIVO_CONTROLE_TEMAS):
+        return False
 
-    if any(p in conteudo for p in PALAVRAS_INVESTIMENTOS):
-        return "investimentos"
+    hoje = datetime.utcnow()
 
-    if any(p in conteudo for p in PALAVRAS_FINANCAS):
-        return "financas"
+    with open(ARQUIVO_CONTROLE_TEMAS, "r", encoding="utf-8") as f:
+        for linha in f:
+            linha = linha.strip()
+            if not linha or "|" not in linha:
+                continue
 
-    return "geral"
+            data_str, tema_salvo = linha.split("|")
+
+            try:
+                data_tema = datetime.strptime(data_str, "%Y-%m-%d")
+            except:
+                continue
+
+            if tema_salvo == tema:
+                if (hoje - data_tema).days < DIAS_REPETICAO_TEMA:
+                    return True
+
+    return False
+
+
+def registrar_tema(tema):
+    hoje = datetime.utcnow().strftime("%Y-%m-%d")
+    with open(ARQUIVO_CONTROLE_TEMAS, "a", encoding="utf-8") as f:
+        f.write(f"{hoje}|{tema}\n")
+
+
+# ==========================================================
+# ESCOLHER MÓDULO E TEMA
+# ==========================================================
+
+def escolher_modulo_e_tema():
+
+    modulos_disponiveis = list(MODULOS_EDITORIAIS.keys())
+    random.shuffle(modulos_disponiveis)
+
+    modulo_escolhido = None
+
+    for modulo in modulos_disponiveis:
+        if not modulo_usado_recentemente(modulo):
+            modulo_escolhido = modulo
+            break
+
+    if not modulo_escolhido:
+        modulo_escolhido = random.choice(modulos_disponiveis)
+
+    temas = MODULOS_EDITORIAIS[modulo_escolhido].copy()
+    random.shuffle(temas)
+
+    tema_escolhido = None
+
+    for tema in temas:
+        if not tema_usado_recentemente(tema):
+            tema_escolhido = tema
+            break
+
+    if not tema_escolhido:
+        tema_escolhido = random.choice(temas)
+
+    return modulo_escolhido, tema_escolhido
 
 
 # ==========================================================
 # GERAR TAGS SEO
 # ==========================================================
 
-def gerar_tags_seo(titulo, texto):
-    stopwords = ["com", "de", "do", "da", "em", "para", "um", "uma", "os", "as", "que", "no", "na", "ao", "aos"]
-    conteudo = f"{titulo} {texto[:100]}"
-    palavras = re.findall(r'\b\w{4,}\b', conteudo.lower())
-    tags = []
+def gerar_tags_seo(modulo, tema):
 
-    for p in palavras:
-        if p not in stopwords and p not in tags:
-            tags.append(p.capitalize())
-    
-    tags_fixas = ["Finanças", "Investimentos", "Marco Daher"]
+    tags = TAGS_FIXAS_FOTOGRAFIA.copy()
 
-    for tf in tags_fixas:
-        if tf not in tags:
-            tags.append(tf)
+    tags.append(modulo.capitalize())
+    tags.append(tema)
 
     resultado = []
     tamanho_atual = 0
@@ -149,162 +204,34 @@ def gerar_tags_seo(titulo, texto):
 
 
 # ==========================================================
-# BUSCAR CONTEÚDO COM RANKING POR TEMA
-# ==========================================================
-
-def buscar_conteudo(tipo):
-
-    pesos_por_tema = {
-
-        "mercado": {
-            "copom": 12,
-            "selic": 10,
-            "banco central": 9,
-            "inflação": 8,
-            "pib": 8,
-            "juros": 7,
-            "recessão": 7,
-            "crise": 6,
-            "dólar": 6,
-            "bolsa": 5,
-            "recorde": 4,
-            "alta": 2,
-            "queda": 2
-        },
-
-        "investimentos": {
-            "fii": 12,
-            "fiis": 12,
-            "fundo imobiliário": 10,
-            "dividendos": 9,
-            "ações": 9,
-            "bolsa": 8,
-            "ibovespa": 8,
-            "dólar": 6,
-            "selic": 5,
-            "juros": 5,
-            "alta": 3,
-            "queda": 3,
-            "recorde": 4
-        },
-
-        "financas": {
-            "inflação": 12,
-            "juros": 10,
-            "dólar": 9,
-            "selic": 8,
-            "banco central": 8,
-            "copom": 7,
-            "pib": 7,
-            "crise": 6,
-            "endividamento": 6,
-            "alta": 3,
-            "queda": 3,
-            "recorde": 4
-        }
-    }
-
-    palavras_peso = pesos_por_tema.get(tipo, {})
-    conteudo_validas = []
-    agora = datetime.utcnow()
-
-    for feed_url in RSS_FEEDS:
-        feed = feedparser.parse(feed_url)
-
-        for entry in feed.entries[:10]:
-
-            titulo = entry.get("title", "")
-            resumo = entry.get("summary", "")
-            link = entry.get("link", "")
-            imagem = entry.get("media_content", [{}])[0].get("url", "")
-
-            if not titulo or not link:
-                continue
-
-            data_publicacao = None
-
-            if hasattr(entry, "published"):
-                try:
-                    data_publicacao = parsedate_to_datetime(entry.published)
-                    if data_publicacao.tzinfo is not None:
-                        data_publicacao = data_publicacao.astimezone(tz=None).replace(tzinfo=None)
-                except:
-                    pass
-
-            if data_publicacao:
-                if (agora - data_publicacao).days > 1:
-                    continue
-
-            if verificar_assunto(titulo, resumo) != tipo:
-                continue
-
-            if link_ja_publicado(link):
-                continue
-
-            conteudo = f"{titulo} {resumo}".lower()
-            score = 0
-
-            for palavra, peso in palavras_peso.items():
-                if palavra in conteudo:
-                    score += peso
-
-            if data_publicacao:
-                minutos_passados = (agora - data_publicacao).total_seconds() / 60
-                bonus_recencia = max(0, 1000 - minutos_passados) / 1000
-                score += bonus_recencia
-
-            conteudo_validas.append({
-                "titulo": titulo,
-                "texto": resumo,
-                "link": link,
-                "imagem": imagem,
-                "score": score
-            })
-
-    if not conteudo_validas:
-        return None
-
-    conteudo_escolhida = max(conteudo_validas, key=lambda x: x["score"])
-
-    return {
-        "titulo": conteudo_escolhida["titulo"],
-        "texto": conteudo_escolhida["texto"],
-        "link": conteudo_escolhida["link"],
-        "imagem": conteudo_escolhida["imagem"]
-    }
-
-
-# ==========================================================
 # MODO TESTE
 # ==========================================================
 
-def executar_modo_teste(tema_forcado=None, publicar=False):
+def executar_modo_teste(modulo_forcado=None, tema_forcado=None, publicar=False):
 
     print("=== MODO TESTE ATIVADO ===")
 
+    if not modulo_forcado:
+        modulo_forcado = random.choice(list(MODULOS_EDITORIAIS.keys()))
+
     if not tema_forcado:
-        tema_forcado = "mercado"
+        tema_forcado = random.choice(MODULOS_EDITORIAIS[modulo_forcado])
 
-    conteudo = buscar_conteudo(tema_forcado)
-
-    if not conteudo:
-        print("Nenhuma notícia encontrada para teste.")
-        return
+    print(f"Módulo: {modulo_forcado}")
+    print(f"Tema: {tema_forcado}")
 
     gemini = GeminiEngine()
     imagem_engine = ImageEngine()
 
-    texto_ia = gemini.gerar_analise_economica(
-        conteudo["titulo"],
-        conteudo["texto"],
-        tema_forcado
-    )
+    texto_ia = gemini.gerar_artigo_tecnico_fotografia(modulo_forcado, tema_forcado)
+    query_visual = gemini.gerar_query_visual_fotografia(modulo_forcado, tema_forcado)
 
-    imagem_final = imagem_engine.obter_imagem(conteudo, tema_forcado)
-    tags = gerar_tags_seo(conteudo["titulo"], texto_ia)
+    imagem_final = imagem_engine.obter_imagem(modulo_forcado, tema_forcado, query_visual)
+
+    tags = gerar_tags_seo(modulo_forcado, tema_forcado)
 
     dados = {
-        "titulo": f" {conteudo['titulo']}",
+        "titulo": tema_forcado,
         "imagem": imagem_final,
         "texto_completo": texto_ia,
         "assinatura": BLOCO_FIXO_FINAL
@@ -318,7 +245,7 @@ def executar_modo_teste(tema_forcado=None, publicar=False):
     service.posts().insert(
         blogId=BLOG_ID,
         body={
-            "title": dados["titulo"],
+            "title": tema_forcado,
             "content": html,
             "labels": tags
         },
@@ -337,10 +264,12 @@ if __name__ == "__main__":
     # VERIFICA MODO TESTE
     if os.getenv("TEST_MODE") == "true":
 
-        tema_teste = os.getenv("TEST_TEMA", "mercado")
+        modulo_teste = os.getenv("TEST_MODULO")
+        tema_teste = os.getenv("TEST_TEMA")
         publicar_teste = os.getenv("TEST_PUBLICAR", "false") == "true"
 
         executar_modo_teste(
+            modulo_forcado=modulo_teste,
             tema_forcado=tema_teste,
             publicar=publicar_teste
         )
@@ -349,45 +278,32 @@ if __name__ == "__main__":
 
     agora = obter_horario_brasilia()
     min_atual = agora.hour * 60 + agora.minute
+    min_agenda = horario_para_minutos(HORARIO_PUBLICACAO)
+
     data_hoje = agora.strftime("%Y-%m-%d")
 
-    horario_escolhido = None
-    tema_escolhido = None
-
-    for horario_agenda, tema in AGENDA_POSTAGENS.items():
-
-        min_agenda = horario_para_minutos(horario_agenda)
-
-        if dentro_da_janela(min_atual, min_agenda):
-            if not ja_postou(data_hoje, horario_agenda):
-                horario_escolhido = horario_agenda
-                tema_escolhido = tema
-                break
-
-    if not horario_escolhido:
-        print("Nenhum horário dentro da janela.")
+    if not dentro_da_janela(min_atual, min_agenda):
+        print("Fora da janela de publicação.")
         exit()
 
-    conteudo = buscar_conteudo(tema_escolhido)
-
-    if not conteudo:
-        print("Nenhuma notícia encontrada.")
+    if ja_postou_hoje(data_hoje):
+        print("Postagem já realizada hoje.")
         exit()
+
+    modulo, tema = escolher_modulo_e_tema()
 
     gemini = GeminiEngine()
     imagem_engine = ImageEngine()
 
-    texto_ia = gemini.gerar_analise_economica(
-        conteudo["titulo"],
-        conteudo["texto"],
-        tema_escolhido
-    )
+    texto_ia = gemini.gerar_artigo_tecnico_fotografia(modulo, tema)
+    query_visual = gemini.gerar_query_visual_fotografia(modulo, tema)
 
-    imagem_final = imagem_engine.obter_imagem(conteudo, tema_escolhido)
-    tags = gerar_tags_seo(conteudo["titulo"], texto_ia)
+    imagem_final = imagem_engine.obter_imagem(modulo, tema, query_visual)
+
+    tags = gerar_tags_seo(modulo, tema)
 
     dados = {
-        "titulo": conteudo["titulo"],
+        "titulo": tema,
         "imagem": imagem_final,
         "texto_completo": texto_ia,
         "assinatura": BLOCO_FIXO_FINAL
@@ -401,14 +317,15 @@ if __name__ == "__main__":
     service.posts().insert(
         blogId=BLOG_ID,
         body={
-            "title": conteudo["titulo"],
+            "title": tema,
             "content": html,
             "labels": tags
         },
         isDraft=False
     ).execute()
 
-    registrar_postagem(data_hoje, horario_escolhido)
-    registrar_link_publicado(conteudo["link"])
+    registrar_postagem(data_hoje)
+    registrar_modulo(modulo)
+    registrar_tema(tema)
 
     print("Post publicado com sucesso.")
