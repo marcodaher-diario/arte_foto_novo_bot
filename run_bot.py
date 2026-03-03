@@ -53,21 +53,35 @@ def dentro_da_janela(min_atual, min_agenda):
 # CONTROLE DIÁRIO
 # ==========================================================
 
-def ja_postou_hoje(data_str):
+def ja_postou(data_str, horario_agenda):
     if not os.path.exists(ARQUIVO_CONTROLE_DIARIO):
         return False
-
     with open(ARQUIVO_CONTROLE_DIARIO, "r", encoding="utf-8") as f:
         for linha in f:
-            if linha.strip() == data_str:
-                return True
-
+            linha = linha.strip()
+            if not linha or "|" not in linha: continue
+            partes = linha.split("|")
+            if len(partes) == 2:
+                data, hora = partes
+                if data == data_str and hora == horario_agenda:
+                    return True
     return False
 
+def registrar_postagem(data_str, horario_agenda):
+    linhas = []
+    if os.path.exists(ARQUIVO_CONTROLE_DIARIO):
+        with open(ARQUIVO_CONTROLE_DIARIO, "r", encoding="utf-8") as f:
+            linhas = f.readlines()
 
-def registrar_postagem(data_str):
-    with open(ARQUIVO_CONTROLE_DIARIO, "a", encoding="utf-8") as f:
-        f.write(f"{data_str}\n")
+    # Adiciona o novo registro e mantém apenas os últimos 15
+    nova_linha = f"{data_str}|{horario_agenda}\n"
+    if nova_linha not in linhas:
+        linhas.append(nova_linha)
+    
+    linhas = linhas[-100:] # Mantém o arquivo leve (aprox. 100 dias de histórico)
+
+    with open(ARQUIVO_CONTROLE_DIARIO, "w", encoding="utf-8") as f:
+        f.writelines(linhas)
 
 
 # ==========================================================
