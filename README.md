@@ -1,0 +1,1 @@
+# arte_foto_novo_bot
